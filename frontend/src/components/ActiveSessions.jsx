@@ -52,15 +52,17 @@ function ActiveSessions({ sessions, isLoading, isUserInSession }) {
 
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-2">
-                        <h3 className="font-bold text-lg truncate">{session.problem}</h3>
-                        <span
-                          className={`badge badge-sm ${getDifficultyBadgeClass(
-                            session.difficulty
-                          )}`}
-                        >
-                          {session.difficulty.slice(0, 1).toUpperCase() +
-                            session.difficulty.slice(1)}
-                        </span>
+                        <h3 className="font-bold text-lg truncate">{session.problem || "Phỏng vấn"}</h3>
+                        {session.difficulty && (
+                          <span
+                            className={`badge badge-sm ${getDifficultyBadgeClass(
+                              session.difficulty
+                            )}`}
+                          >
+                            {session.difficulty.slice(0, 1).toUpperCase() +
+                              session.difficulty.slice(1)}
+                          </span>
+                        )}
                       </div>
 
                       <div className="flex items-center gap-4 text-sm opacity-80">

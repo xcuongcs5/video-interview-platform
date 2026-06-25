@@ -9,7 +9,15 @@ function CodeEditorPanel({
   onLanguageChange,
   onCodeChange,
   onRunCode,
+  onPasteCode,
 }) {
+  const handleEditorDidMount = (editor, monaco) => {
+    editor.onDidPaste(() => {
+      if (onPasteCode) {
+        onPasteCode();
+      }
+    });
+  };
   return (
     <div className="h-full bg-base-300 flex flex-col">
       <div className="flex items-center justify-between px-4 py-3 bg-base-100 border-t border-base-300">
@@ -49,6 +57,7 @@ function CodeEditorPanel({
           language={LANGUAGE_CONFIG[selectedLanguage].monacoLang}
           value={code}
           onChange={onCodeChange}
+          onMount={handleEditorDidMount}
           theme="vs-dark"
           options={{
             fontSize: 16,

@@ -64,3 +64,14 @@ export const useEndSession = () => {
 
   return result;
 };
+
+export const useStartCodeTest = () => {
+  const result = useMutation({
+    mutationKey: ["startCodeTest"],
+    mutationFn: sessionApi.startCodeTest,
+    onSuccess: () => toast.success("Code Test mode started!"),
+    onError: (error) => toast.error(error.response?.data?.message || "Failed to start code test mode"),
+  });
+
+  return result;
+};

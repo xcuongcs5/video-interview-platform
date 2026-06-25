@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router";
-import { BookOpenIcon, LayoutDashboardIcon, SparklesIcon } from "lucide-react";
+import { BookOpenIcon, LayoutDashboardIcon, CpuIcon } from "lucide-react";
 import { UserButton } from "@clerk/clerk-react";
 
 function Navbar() {
@@ -18,7 +18,7 @@ function Navbar() {
           className="group flex items-center gap-3 hover:scale-105 transition-transform duration-200"
         >
           <div className="size-10 rounded-xl bg-gradient-to-r from-primary via-secondary to-accent flex items-center justify-center shadow-lg ">
-            <SparklesIcon className="size-6 text-white" />
+            <CpuIcon className="size-6 text-white" />
           </div>
 
           <div className="flex flex-col">
