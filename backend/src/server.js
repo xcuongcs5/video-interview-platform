@@ -7,9 +7,39 @@ import cors from 'cors';
 import { inngest, functions } from './lib/inngest.js';
 import { clerkMiddleware } from '@clerk/express'
 import chatRoutes from './routes/chatRoutes.js';
-import sessionRoutes from './routes/sessionRoute.js'
+import sessionRoutes from './routes/sessionRoute.js';
+import { createServer } from 'http';
+import { Server } from 'socket.io';
 
 const app = express();
+const httpServer = createServer(app);
+const io = new Server(httpServer, {
+    cors: {
+        origin: ENV.CLIENT_URL,
+        credentials: true
+    }
+});
+
+io.on("connection", (socket) => {
+    console.log("Client connected to socket:", socket.id);
+
+    socket.on("join_room", (sessionId) => {
+        socket.join(sessionId);
+        console.log(`Socket ${socket.id} joined room ${sessionId}`);
+    });
+
+    socket.on("code_change", ({ sessionId, code }) => {
+        socket.to(sessionId).emit("code_update", { code });
+    });
+
+    socket.on("language_change", ({ sessionId, language }) => {
+        socket.to(sessionId).emit("language_update", { language });
+    });
+
+    socket.on("disconnect", () => {
+        console.log("Client disconnected:", socket.id);
+    });
+});
 
 const __dirname = path.resolve()
 
@@ -43,7 +73,7 @@ if (ENV.NODE_ENV === 'production') {
 const startServer = async() => {
     try {
         await connectDB();
-        app.listen(ENV.PORT, () => {
+        httpServer.listen(ENV.PORT, () => {
             console.log(`Server is running on port: ${ENV.PORT}`);
         });
     } catch (error) {
