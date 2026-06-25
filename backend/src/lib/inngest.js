@@ -32,7 +32,7 @@ const deleteUserFromDB = inngest.createFunction(
 
         const {id} = event.data;
 
-        await User.deleteOne({clerlId:id});
+        await User.deleteOne({ clerkId: id });
     }
 );
 
