@@ -1,4 +1,3 @@
-import { request } from "express";
 import mongoose from "mongoose";
 
 const userSchema = new mongoose.Schema({
@@ -15,7 +14,7 @@ const userSchema = new mongoose.Schema({
         type:String,
         default:""
     },
-    clerlId:{
+    clerkId:{
         type:String,
         required:true,
         unique:true
