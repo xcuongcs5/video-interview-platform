@@ -33,7 +33,10 @@ export const protectRoute = [
                     console.log("JIT provisioning successful.");
                 } catch (clerkErr) {
                     console.error("Error in JIT provisioning:", clerkErr);
-                    return res.status(404).json({message:"User not found"});
+                    return res.status(404).json({
+                        message: "User not found (JIT Failed)",
+                        error: clerkErr.message || clerkErr.toString()
+                    });
                 }
             }
 
