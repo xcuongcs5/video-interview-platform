@@ -3,31 +3,44 @@ import Session from "../models/Session.js";
 
 export async function createSession(req, res) {
   try {
-    const { problem, difficulty } = req.body;
+    const { problem = "", difficulty = "", customProblem } = req.body;
     const userId = req.user._id;
     const clerkId = req.user.clerkId;
-
-    if (!problem || !difficulty) {
-      return res.status(400).json({ message: "Problem and difficulty are required" });
-    }
 
     // generate a unique call id for stream video
     const callId = `session_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 
+    const sessionData = { 
+      problem: problem || "", 
+      difficulty: difficulty || "", 
+      host: userId, 
+      callId,
+      isCodeTestMode: !!problem || !!customProblem
+    };
+
+    if (customProblem) {
+      sessionData.customProblem = customProblem;
+      sessionData.problem = customProblem.title;
+      sessionData.difficulty = customProblem.difficulty.toLowerCase();
+    }
+
     // create session in db
-    const session = await Session.create({ problem, difficulty, host: userId, callId });
+    const session = await Session.create(sessionData);
+
+    const actualProblem = sessionData.problem;
+    const actualDifficulty = sessionData.difficulty;
 
     // create stream video call
     await streamClient.video.call("default", callId).getOrCreate({
       data: {
         created_by_id: clerkId,
-        custom: { problem, difficulty, sessionId: session._id.toString() },
+        custom: { problem: actualProblem || "Interview", difficulty: actualDifficulty || "N/A", sessionId: session._id.toString() },
       },
     });
 
     // chat messaging
     const channel = chatClient.channel("messaging", callId, {
-      name: `${problem} Session`,
+      name: problem ? `${problem} Session` : "Interview Session",
       created_by_id: clerkId,
       members: [clerkId],
     });
@@ -159,6 +172,56 @@ export async function endSession(req, res) {
     res.status(200).json({ session, message: "Session ended successfully" });
   } catch (error) {
     console.log("Error in endSession controller:", error.message);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+}
+
+export async function startCodeTest(req, res) {
+  try {
+    const { id } = req.params;
+    const { problem, difficulty, customProblem } = req.body;
+    const userId = req.user._id;
+
+    if (!problem && !customProblem) {
+      return res.status(400).json({ message: "Problem is required" });
+    }
+
+    const session = await Session.findById(id);
+
+    if (!session) return res.status(404).json({ message: "Session not found" });
+
+    // check if user is the host
+    if (session.host.toString() !== userId.toString()) {
+      return res.status(403).json({ message: "Only the host can start code test" });
+    }
+
+    let actualProblem = problem || "";
+    let actualDifficulty = difficulty || "";
+
+    if (customProblem) {
+      session.customProblem = customProblem;
+      actualProblem = customProblem.title;
+      actualDifficulty = customProblem.difficulty.toLowerCase();
+    }
+
+    // update stream video call
+    const call = streamClient.video.call("default", session.callId);
+    await call.update({
+      custom: { problem: actualProblem, difficulty: actualDifficulty, sessionId: session._id.toString() },
+    });
+
+    // update stream chat channel
+    const channel = chatClient.channel("messaging", session.callId);
+    await channel.update({ name: `${actualProblem} Session` });
+
+    session.problem = actualProblem;
+    session.difficulty = actualDifficulty;
+    session.isCodeTestMode = true;
+    await session.save();
+
+    res.status(200).json({ session, message: "Code test mode started" });
+  } catch (error) {
+    console.log("Error in startCodeTest controller:", error.message);
     res.status(500).json({ message: "Internal Server Error" });
   }
 }

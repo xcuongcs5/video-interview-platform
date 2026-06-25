@@ -22,12 +22,11 @@ function DashboardPage() {
   const { data: recentSessionsData, isLoading: loadingRecentSessions } = useMyRecentSessions();
 
   const handleCreateRoom = () => {
-    if (!roomConfig.problem || !roomConfig.difficulty) return;
-
     createSessionMutation.mutate(
       {
         problem: roomConfig.problem,
-        difficulty: roomConfig.difficulty.toLowerCase(),
+        difficulty: roomConfig.difficulty ? roomConfig.difficulty.toLowerCase() : "",
+        customProblem: roomConfig.customProblem,
       },
       {
         onSuccess: (data) => {

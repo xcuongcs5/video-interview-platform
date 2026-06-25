@@ -1,19 +1,21 @@
 import { useUser } from "@clerk/clerk-react";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router";
-import { useEndSession, useJoinSession, useSessionById } from "../hooks/useSessions";
+import { useEndSession, useJoinSession, useSessionById, useStartCodeTest } from "../hooks/useSessions";
 import { PROBLEMS } from "../data/problems";
 import { executeCode } from "../lib/piston";
 import Navbar from "../components/Navbar";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { getDifficultyBadgeClass } from "../lib/utils";
-import { Loader2Icon, LogOutIcon, PhoneOffIcon } from "lucide-react";
+import { Loader2Icon, LogOutIcon, PhoneOffIcon, Code2Icon, BookOpenIcon, Edit3Icon } from "lucide-react";
 import CodeEditorPanel from "../components/CodeEditorPanel";
 import OutputPanel from "../components/OutputPanel";
 
 import useStreamClient from "../hooks/useStreamClient";
 import { StreamCall, StreamVideo } from "@stream-io/video-react-sdk";
 import VideoCallUI from "../components/VideoCallUI";
+import CustomProblemForm from "../components/CustomProblemForm";
+import toast from "react-hot-toast";
 
 function SessionPage() {
   const navigate = useNavigate();
@@ -26,6 +28,17 @@ function SessionPage() {
 
   const joinSessionMutation = useJoinSession();
   const endSessionMutation = useEndSession();
+  const startCodeTestMutation = useStartCodeTest();
+
+  const [showCodeTestModal, setShowCodeTestModal] = useState(false);
+  const [selectedProblem, setSelectedProblem] = useState("");
+  const [activeTab, setActiveTab] = useState("library");
+  const [customProblem, setCustomProblem] = useState({
+    title: "",
+    difficulty: "medium",
+    description: { text: "" },
+    examples: [],
+  });
 
   const session = sessionData?.session;
   const isHost = session?.host?.clerkId === user?.id;
@@ -39,7 +52,9 @@ function SessionPage() {
   );
 
   // find the problem data based on session problem title
-  const problemData = session?.problem
+  const problemData = session?.customProblem
+    ? session.customProblem
+    : session?.problem
     ? Object.values(PROBLEMS).find((p) => p.title === session.problem)
     : null;
 
@@ -70,6 +85,45 @@ function SessionPage() {
     }
   }, [problemData, selectedLanguage]);
 
+  // --- ANTI-CHEAT LOGIC ---
+  const handleCandidateViolation = async (type) => {
+    if (!isParticipant || !channel) return;
+
+    const messageText =
+      type === "tab_switch"
+        ? "⚠️ [Hệ thống cảnh báo] Ứng viên vừa chuyển sang tab/cửa sổ khác!"
+        : "⚠️ [Hệ thống cảnh báo] Ứng viên vừa thực hiện hành vi Dán (Paste) code vào trình soạn thảo!";
+
+    try {
+      await channel.sendMessage({
+        text: messageText,
+      });
+      toast.error(
+        type === "tab_switch"
+          ? "Cảnh báo: Không chuyển sang tab/cửa sổ khác!"
+          : "Cảnh báo: Hành vi dán (paste) code đã bị ghi nhận!",
+        { duration: 5000 }
+      );
+    } catch (e) {
+      console.log("Failed to send violation message", e);
+    }
+  };
+
+  useEffect(() => {
+    if (!isParticipant || !channel) return;
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        handleCandidateViolation("tab_switch");
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [isParticipant, channel]);
+
   const handleLanguageChange = (e) => {
     const newLang = e.target.value;
     setSelectedLanguage(newLang);
@@ -95,12 +149,114 @@ function SessionPage() {
     }
   };
 
+  const handleStartCodeTest = () => {
+    let payloadData = {};
+    if (activeTab === "library") {
+      if (!selectedProblem) return;
+      const problemObj = Object.values(PROBLEMS).find((p) => p.title === selectedProblem);
+      if (!problemObj) return;
+      payloadData = { problem: problemObj.title, difficulty: problemObj.difficulty.toLowerCase() };
+    } else {
+      if (!customProblem.title) return;
+      payloadData = { customProblem };
+    }
+
+    startCodeTestMutation.mutate(
+      {
+        id,
+        data: payloadData,
+      },
+      {
+        onSuccess: () => {
+          setShowCodeTestModal(false);
+          refetch(); // Ensure immediate update
+        },
+      }
+    );
+  };
+
+  const renderVideoCall = () => (
+    <div className="h-full bg-base-200 p-4 overflow-auto">
+      {isInitializingCall ? (
+        <div className="h-full flex items-center justify-center">
+          <div className="text-center">
+            <Loader2Icon className="w-12 h-12 mx-auto animate-spin text-primary mb-4" />
+            <p className="text-lg">Đang kết nối Video Call...</p>
+          </div>
+        </div>
+      ) : !streamClient || !call ? (
+        <div className="h-full flex items-center justify-center">
+          <div className="card bg-base-100 shadow-xl max-w-md">
+            <div className="card-body items-center text-center">
+              <div className="w-24 h-24 bg-error/10 rounded-full flex items-center justify-center mb-4">
+                <PhoneOffIcon className="w-12 h-12 text-error" />
+              </div>
+              <h2 className="card-title text-2xl">Kết nối thất bại</h2>
+              <p className="text-base-content/70">Không thể kết nối vào Video Call</p>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="h-full">
+          <StreamVideo client={streamClient}>
+            <StreamCall call={call}>
+              <VideoCallUI chatClient={chatClient} channel={channel} />
+            </StreamCall>
+          </StreamVideo>
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div className="h-screen bg-base-100 flex flex-col">
       <Navbar />
 
-      <div className="flex-1">
-        <PanelGroup direction="horizontal">
+      <div className="flex-1 flex flex-col">
+        {!session?.isCodeTestMode ? (
+          <div className="h-full flex flex-col">
+            {/* TOOLBAR FOR INTERVIEW MODE */}
+            <div className="bg-base-100 border-b border-base-300 p-4 flex justify-between items-center shadow-sm z-10">
+               <div>
+                  <h1 className="text-xl font-bold">Chế độ phỏng vấn</h1>
+                  <p className="text-sm text-base-content/60">Giao tiếp với ứng viên trước khi làm bài</p>
+               </div>
+               <div className="flex items-center gap-3">
+                 {isHost && session?.status === "active" && (
+                   <>
+                    <button 
+                      className="btn btn-primary"
+                      onClick={() => setShowCodeTestModal(true)}
+                    >
+                      <Code2Icon className="size-5" /> Bắt đầu Test Code
+                    </button>
+                    <button
+                      onClick={handleEndSession}
+                      disabled={endSessionMutation.isPending}
+                      className="btn btn-error gap-2"
+                    >
+                      {endSessionMutation.isPending ? (
+                        <Loader2Icon className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <LogOutIcon className="w-4 h-4" />
+                      )}
+                      Kết thúc Session
+                    </button>
+                   </>
+                 )}
+                 {session?.status === "completed" && (
+                   <span className="badge badge-ghost badge-lg">Đã hoàn thành</span>
+                 )}
+               </div>
+            </div>
+            
+            {/* VIDEO CALL CONTAINER */}
+            <div className="flex-1 overflow-hidden">
+              {renderVideoCall()}
+            </div>
+          </div>
+        ) : (
+          <PanelGroup direction="horizontal">
           {/* LEFT PANEL - CODE EDITOR & PROBLEM DETAILS */}
           <Panel defaultSize={50} minSize={30}>
             <PanelGroup direction="vertical">
@@ -239,6 +395,7 @@ function SessionPage() {
                       onLanguageChange={handleLanguageChange}
                       onCodeChange={(value) => setCode(value)}
                       onRunCode={handleRunCode}
+                      onPasteCode={() => handleCandidateViolation("paste")}
                     />
                   </Panel>
 
@@ -256,39 +413,77 @@ function SessionPage() {
 
           {/* RIGHT PANEL - VIDEO CALLS & CHAT */}
           <Panel defaultSize={50} minSize={30}>
-            <div className="h-full bg-base-200 p-4 overflow-auto">
-              {isInitializingCall ? (
-                <div className="h-full flex items-center justify-center">
-                  <div className="text-center">
-                    <Loader2Icon className="w-12 h-12 mx-auto animate-spin text-primary mb-4" />
-                    <p className="text-lg">Đang kết nối Video Call...</p>
-                  </div>
-                </div>
-              ) : !streamClient || !call ? (
-                <div className="h-full flex items-center justify-center">
-                  <div className="card bg-base-100 shadow-xl max-w-md">
-                    <div className="card-body items-center text-center">
-                      <div className="w-24 h-24 bg-error/10 rounded-full flex items-center justify-center mb-4">
-                        <PhoneOffIcon className="w-12 h-12 text-error" />
-                      </div>
-                      <h2 className="card-title text-2xl">Kết nối thất bại</h2>
-                      <p className="text-base-content/70">Không thể kết nối vào Video Call</p>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="h-full">
-                  <StreamVideo client={streamClient}>
-                    <StreamCall call={call}>
-                      <VideoCallUI chatClient={chatClient} channel={channel} />
-                    </StreamCall>
-                  </StreamVideo>
-                </div>
-              )}
-            </div>
+            {renderVideoCall()}
           </Panel>
         </PanelGroup>
+        )}
       </div>
+
+      {/* CODE TEST MODAL */}
+      {showCodeTestModal && (
+        <div className="modal modal-open">
+          <div className="modal-box max-w-2xl">
+            <h3 className="font-bold text-lg mb-4">Bắt đầu Test Code</h3>
+
+            {/* TABS */}
+            <div className="tabs tabs-boxed mb-6">
+              <button 
+                className={`tab gap-2 flex-1 ${activeTab === 'library' ? 'tab-active' : ''}`}
+                onClick={() => setActiveTab("library")}
+              >
+                <BookOpenIcon className="size-4" /> Từ thư viện
+              </button>
+              <button 
+                className={`tab gap-2 flex-1 ${activeTab === 'custom' ? 'tab-active' : ''}`}
+                onClick={() => setActiveTab("custom")}
+              >
+                <Edit3Icon className="size-4" /> Tự soạn đề
+              </button>
+            </div>
+
+            <div className="space-y-6">
+              {activeTab === "library" ? (
+                <div className="form-control w-full">
+                  <label className="label">
+                    <span className="label-text">Chọn bài tập cho ứng viên</span>
+                  </label>
+                  <select 
+                    className="select select-bordered w-full"
+                    value={selectedProblem}
+                    onChange={(e) => setSelectedProblem(e.target.value)}
+                  >
+                    <option value="" disabled>Chọn một bài tập...</option>
+                    {Object.values(PROBLEMS).map((p) => (
+                      <option key={p.id} value={p.title}>{p.title} ({p.difficulty})</option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <CustomProblemForm 
+                  customProblem={customProblem} 
+                  setCustomProblem={setCustomProblem} 
+                />
+              )}
+            </div>
+
+            <div className="modal-action">
+              <button className="btn btn-ghost" onClick={() => setShowCodeTestModal(false)}>Hủy</button>
+              <button 
+                className="btn btn-primary" 
+                disabled={
+                  startCodeTestMutation.isPending || 
+                  (activeTab === "library" ? !selectedProblem : !customProblem.title)
+                }
+                onClick={handleStartCodeTest}
+              >
+                {startCodeTestMutation.isPending ? <Loader2Icon className="size-5 animate-spin" /> : <Code2Icon className="size-5" />}
+                Xác nhận
+              </button>
+            </div>
+          </div>
+          <div className="modal-backdrop" onClick={() => setShowCodeTestModal(false)}></div>
+        </div>
+      )}
     </div>
   );
 }
