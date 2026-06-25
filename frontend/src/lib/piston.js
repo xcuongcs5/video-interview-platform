@@ -1,11 +1,12 @@
-// Piston API is a service for code execution
+// Judge0 API is used as a free public service for code execution
+// Since Piston API requires an authorization token now, we switch to Judge0 CE.
 
-const PISTON_API = "https://emkc.org/api/v2/piston";
+const JUDGE0_API = "https://ce.judge0.com/submissions?base64_encoded=false&wait=true";
 
 const LANGUAGE_VERSIONS = {
-  javascript: { language: "javascript", version: "18.15.0" },
-  python: { language: "python", version: "3.10.0" },
-  java: { language: "java", version: "15.0.2" },
+  javascript: { language_id: 93, name: "Node.js 18.15.0" },
+  python: { language_id: 92, name: "Python 3.11.2" },
+  java: { language_id: 91, name: "Java 17.0.6" },
 };
 
 /**
@@ -24,20 +25,14 @@ export async function executeCode(language, code) {
       };
     }
 
-    const response = await fetch(`${PISTON_API}/execute`, {
+    const response = await fetch(JUDGE0_API, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        language: languageConfig.language,
-        version: languageConfig.version,
-        files: [
-          {
-            name: `main.${getFileExtension(language)}`,
-            content: code,
-          },
-        ],
+        source_code: code,
+        language_id: languageConfig.language_id,
       }),
     });
 
@@ -50,14 +45,14 @@ export async function executeCode(language, code) {
 
     const data = await response.json();
 
-    const output = data.run.output || "";
-    const stderr = data.run.stderr || "";
+    const output = data.stdout || "";
+    const stderr = data.stderr || data.compile_output || data.message || "";
 
-    if (stderr) {
+    if (data.status && data.status.id !== 3) { // 3 means "Accepted"
       return {
         success: false,
         output: output,
-        error: stderr,
+        error: stderr || `Execution failed: ${data.status.description}`,
       };
     }
 
@@ -71,14 +66,4 @@ export async function executeCode(language, code) {
       error: `Failed to execute code: ${error.message}`,
     };
   }
-}
-
-function getFileExtension(language) {
-  const extensions = {
-    javascript: "js",
-    python: "py",
-    java: "java",
-  };
-
-  return extensions[language] || "txt";
 }
