@@ -16,6 +16,7 @@ import { StreamCall, StreamVideo } from "@stream-io/video-react-sdk";
 import VideoCallUI from "../components/VideoCallUI";
 import CustomProblemForm from "../components/CustomProblemForm";
 import toast from "react-hot-toast";
+import { socket } from "../lib/socket";
 
 function SessionPage() {
   const navigate = useNavigate();
@@ -124,13 +125,43 @@ function SessionPage() {
     };
   }, [isParticipant, channel]);
 
+  // --- SOCKET.IO REAL-TIME COLLABORATION ---
+  useEffect(() => {
+    if (!session || !user || !id) return;
+
+    socket.connect();
+    socket.emit("join_room", id);
+
+    socket.on("code_update", ({ code: newCode }) => {
+      setCode(newCode);
+    });
+
+    socket.on("language_update", ({ language: newLanguage }) => {
+      setSelectedLanguage(newLanguage);
+    });
+
+    return () => {
+      socket.off("code_update");
+      socket.off("language_update");
+      socket.disconnect();
+    };
+  }, [id, session, user]);
+
   const handleLanguageChange = (e) => {
     const newLang = e.target.value;
     setSelectedLanguage(newLang);
+    socket.emit("language_change", { sessionId: id, language: newLang });
+
     // use problem-specific starter code
     const starterCode = problemData?.starterCode?.[newLang] || "";
     setCode(starterCode);
+    socket.emit("code_change", { sessionId: id, code: starterCode });
     setOutput(null);
+  };
+
+  const handleCodeChange = (value) => {
+    setCode(value);
+    socket.emit("code_change", { sessionId: id, code: value });
   };
 
   const handleRunCode = async () => {
@@ -393,7 +424,7 @@ function SessionPage() {
                       code={code}
                       isRunning={isRunning}
                       onLanguageChange={handleLanguageChange}
-                      onCodeChange={(value) => setCode(value)}
+                      onCodeChange={handleCodeChange}
                       onRunCode={handleRunCode}
                       onPasteCode={() => handleCandidateViolation("paste")}
                     />
