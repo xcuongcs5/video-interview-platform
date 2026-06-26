@@ -25,7 +25,7 @@ function Navbar() {
             <span className="font-black text-xl bg-gradient-to-r from-primary via-secondary to-accent bg-clip-text text-transparent font-mono tracking-wider">
               Interview Smart
             </span>
-            <span className="text-xs text-base-content/60 font-medium -mt-1">Cùng nhau Code</span>
+            <span className="text-xs text-base-content/60 font-medium -mt-1">Interview Platform</span>
           </div>
         </Link>
 

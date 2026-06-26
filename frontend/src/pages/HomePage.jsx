@@ -55,10 +55,10 @@ function HomePage() {
 
             <h1 className="text-5xl lg:text-7xl font-black leading-tight">
               <span className="bg-gradient-to-r from-primary via-secondary to-accent bg-clip-text text-transparent">
-                Cùng nhau Code,
+                Interview Platform,
               </span>
               <br />
-              <span className="text-base-content">Cùng nhau Học</span>
+              <span className="text-base-content">Interview và Pair Programming</span>
             </h1>
 
             <p className="text-xl text-base-content/70 leading-relaxed max-w-xl">
